@@ -1,9 +1,9 @@
 {
     "BotConfigStruct": {
-    "BotToken": "MTEwNTE3NDQ4MjIwMjY2OTE3Ng.G49NqJ.K-4oGmRBhPrHuRfWnc6GaTCl4u7n4MF8DFQw_o"
+    "BotToken": ""
     },
     "YoutubeConfigStruct": {
-        "ApiKey": "AIzaSyAueDwNCFiqLGZmxfM6HB8ufAP8MtSqNuU"
+        "ApiKey": ""
     },
     "AudioConfigStruct": {
         "AudioBitrateKbps": 128,
