@@ -1,8 +1,6 @@
 # A discord music bot
 
-This is a personal project just for fun
-You can use it for your own experiments and fun
-I would highly discourage to monetize it.
+Work in progress
 
 ## Steps to use
 

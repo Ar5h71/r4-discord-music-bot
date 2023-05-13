@@ -8,34 +8,53 @@ E-mail: ad.sigh.arsh@gmail.com
 package bot
 
 import (
-	"errors"
 	"log"
-	"strings"
-	"sync"
 
+	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/Ar5h71/r4-music-bot/config"
-	"github.com/Ar5h71/r4-music-bot/utils"
 	"github.com/bwmarrin/discordgo"
 )
 
-var (
+// struct for bot instance on a guild
+type BotInstance struct {
 	BotSession         *discordgo.Session
-	RegisteredCommands = make([]*discordgo.ApplicationCommand, len(commands))
-)
-
-// store response for concurrent registering and deregistering commands
-type RegisterCommandResp struct {
-	commandName string
-	err         error
+	BotVoiceConnection *discordgo.VoiceConnection
+	GuildId            string
+	VoiceChannelId     string
+	TextChannelId      string
+	Speaking           bool
+	AudioStream        *AudioStreamSession
+	// add for queue and current playing song
 }
 
-// Create and open bot session
+var (
+	BotSession   *discordgo.Session
+	BotInstances = make(map[string]*BotInstance)
+)
+
+func NewBotInstance(session *discordgo.Session,
+	guildId,
+	tChannelId,
+	vchannelId string,
+	speaking bool,
+	voiceConnection *discordgo.VoiceConnection) *BotInstance {
+	return &BotInstance{
+		BotSession:         session,
+		GuildId:            guildId,
+		VoiceChannelId:     vchannelId,
+		TextChannelId:      tChannelId,
+		Speaking:           speaking,
+		BotVoiceConnection: voiceConnection,
+	}
+}
+
+// Create and open bot session and voice connection
 func StartBot() error {
 	log.Printf("Initializing bot session.")
 	var err error
 
 	// Create session
-	BotSession, err = discordgo.New(utils.BotPrefix + config.Config.BotToken)
+	BotSession, err = discordgo.New(common.BotPrefix + config.Config.BotConfig.BotToken)
 	if err != nil {
 		log.Printf("Failed to start new session for bot. Got error: [%s]", err.Error())
 		return err
@@ -66,39 +85,16 @@ func StartBot() error {
 func RegisterCommands() error {
 	log.Printf("Registering commands for the bot...")
 
-	wg := new(sync.WaitGroup)
-	wg.Add(len(commands))
-
-	var registerCommandResp []*RegisterCommandResp
 	for idx, command := range commands {
-		go func(cmd *discordgo.ApplicationCommand, i int) {
-			defer wg.Done()
-			registeredCmd, err := BotSession.ApplicationCommandCreate(BotSession.State.User.ID, "", cmd)
-			response := &RegisterCommandResp{
-				commandName: cmd.Name,
-				err:         nil,
-			}
-			if err != nil {
-				log.Printf("Cannot create '%v' command: %v", cmd.Name, err)
-				response.err = err
-			}
-			log.Printf("Registered command: [%s]", cmd.Name)
-			RegisteredCommands[i] = registeredCmd
-			registerCommandResp = append(registerCommandResp, response)
-		}(command, idx)
-	}
-	log.Printf("waiting for all commands to get registered")
-	wg.Wait()
-	log.Printf("Attempted to register all commands")
-	var errMsg []string
-	for _, response := range registerCommandResp {
-		if response.err != nil {
-			errMsg = append(errMsg, response.err.Error())
+		cmd, err := BotSession.ApplicationCommandCreate(BotSession.State.User.ID, "", command)
+		if err != nil {
+			log.Printf("Cannot create '%v' command: %v", cmd.Name, err)
+			return err
 		}
+		log.Printf("Registered command: [%s]", cmd.Name)
+		RegisteredCommands[idx] = cmd
 	}
-	if len(errMsg) > 0 {
-		return errors.New(strings.Join(errMsg, ","))
-	}
+	log.Printf("Registered all commands")
 	return nil
 }
 
@@ -106,23 +102,17 @@ func RegisterCommands() error {
 func RemoveCommands() error {
 	log.Printf("Removing commands")
 
-	wg := new(sync.WaitGroup)
-	wg.Add(len(RegisteredCommands))
 	for _, command := range RegisteredCommands {
-		go func(cmd *discordgo.ApplicationCommand) {
-			defer wg.Done()
-			if cmd == nil {
-				log.Printf("command is nil")
-			}
-			err := BotSession.ApplicationCommandDelete(BotSession.State.User.ID, "", cmd.ID)
-			if err != nil {
-				log.Printf("Cannot delete '%v' command: %v", cmd.Name, err)
-			}
-		}(command)
+		if command == nil {
+			log.Printf("command is nil")
+			continue
+		}
+		err := BotSession.ApplicationCommandDelete(BotSession.State.User.ID, "", command.ID)
+		if err != nil {
+			log.Printf("Cannot delete '%v' command: %v", command.Name, err)
+		}
 	}
-	log.Printf("Attempting to remove all commands.")
-	wg.Wait()
-	log.Printf("Successfully attempted to removed all commands")
+	log.Printf("Successfully removed all commands")
 	return nil
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/Ar5h71/r4-music-bot/bot"
 	"github.com/Ar5h71/r4-music-bot/config"
+	"github.com/Ar5h71/r4-music-bot/musicmanager"
 )
 
 func main() {
@@ -23,6 +24,12 @@ func main() {
 	err := config.InitConfig()
 	if err != nil {
 		log.Panicf("Failed to initialize config. Got error: [%s]", err.Error())
+	}
+
+	// init youtube service client
+	err = musicmanager.InitYoutubeClient()
+	if err != nil {
+		log.Panicf("Failed to init youtube client. Got error: [%s]", err.Error())
 	}
 
 	// start session for bot

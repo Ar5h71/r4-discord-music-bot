@@ -8,6 +8,7 @@ E-mail: ad.sigh.arsh@gmail.com
 package bot
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/bwmarrin/discordgo"
@@ -99,23 +100,18 @@ var (
 			// DO SOMETHING
 			// dummy response for testing
 			// handling for multiple options
-			options := interaction.ApplicationCommandData().Options
-			optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
-			for _, option := range options {
-				optionMap[option.Name] = option
-			}
-			log.Printf("'Play' command received")
+			song, err := PlayCommandHandler(session, interaction)
 
-			// dummy message response for command
-			msgFmt := "'Play' command received with option value: "
-			if option, ok := optionMap[SongQueryOptionName]; ok {
-				msgFmt += option.StringValue()
-				log.Printf("Command: 'Play', Option: song-query, Value: '%s'", option.StringValue())
+			var msg string
+			if err != nil {
+				msg = err.Error()
+			} else {
+				msg = fmt.Sprintf("Executed play command. Added '%s' to queue.", song.SongTitle)
 			}
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: msgFmt,
+					Content: msg,
 				},
 			})
 		},
@@ -242,4 +238,5 @@ var (
 			})
 		},
 	}
+	RegisteredCommands = make([]*discordgo.ApplicationCommand, len(commands))
 )
