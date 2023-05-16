@@ -1,14 +1,8 @@
 {
     "BotConfigStruct": {
-    "BotToken": ""
+    "BotToken": "MTEwNzMxNTI4NzU4NzU3MzkzMw.GIPb6g.ZCYTg4tYrH-36HzPB9UFcfNmBBzwHpINsM7ulY"
     },
     "YoutubeConfigStruct": {
-        "ApiKey": ""
-    },
-    "AudioConfigStruct": {
-        "AudioBitrateKbps": 128,
-        "AudioSamplingRate": 48000,
-        "AudioSamplingSize": 960,
-        "Channels": 2
+        "ApiKey": "AIzaSyAvcruwtL3ChGlfUQKKgAnEKA0BFS-Zh_w"
     }
 }

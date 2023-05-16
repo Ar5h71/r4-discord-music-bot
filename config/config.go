@@ -19,7 +19,6 @@ import (
 type ConfigStruct struct {
 	BotConfig     BotConfigStruct     `json:"BotConfigStruct"`
 	YoutubeConfig YoutubeConfigStruct `json:"YoutubeConfigStruct"`
-	AudioConfig   AudioConfigStruct   `json:"AudioConfigStruct"`
 }
 
 type BotConfigStruct struct {
@@ -28,13 +27,6 @@ type BotConfigStruct struct {
 
 type YoutubeConfigStruct struct {
 	ApiKey string `json:"ApiKey"`
-}
-
-type AudioConfigStruct struct {
-	AudioBitrateKbps  int64
-	AudioSamplingRate int64
-	AudioSamplingSize int64
-	Channels          int64
 }
 
 var Config *ConfigStruct

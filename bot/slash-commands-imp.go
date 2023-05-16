@@ -3,82 +3,148 @@ package bot
 import (
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"time"
 
 	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/Ar5h71/r4-music-bot/musicmanager"
 	"github.com/bwmarrin/discordgo"
 )
 
-func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+func createAndGetBotInstance(session *discordgo.Session, interaction *discordgo.InteractionCreate, create bool) (*BotInstance, error) {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
+
+	// check if interaction issued from a user in voice channel
+	if vChannelId == "" {
+		log.Printf("%s %s user not in a voice channel", logCtx, interaction.Member.User.Username)
+		return nil, errors.New("You need to be in a voice channel to use this command")
+	}
+
+	// check if bot instance already exists for the guild from where
+	// interaction came
+	botInstance, ok := BotInstances[guildId]
+	// if create flag is false, return with error
+	if !ok {
+		if !create {
+			log.Printf("%s, Create flag se to false. Returning", logCtx)
+			return nil, errors.New("Play a song first to use this command")
+		}
+		log.Printf("%s Creating bot instance.", logCtx)
+		botInstance, err := NewBotInstance(session, guildId, interaction.ChannelID, vChannelId, false)
+		if err != nil {
+			log.Printf("%s Failed to create bot instance. Got error: %s", logCtx, err.Error())
+			return nil, errors.New("Failed to join voice channel. Internal server error")
+		}
+		// save to map
+		BotInstances[guildId] = botInstance
+		return botInstance, nil
+	}
+	// if instance already present, check if command received from correct voice
+	// and text channel
+	if botInstance.TextChannelId != interaction.ChannelID {
+		log.Printf("%s command received from different text channel", logCtx)
+		channel, err := session.Channel(botInstance.TextChannelId)
+		if err != nil {
+			log.Printf("%s Failed to get text channel information. Got error: %s", logCtx, err.Error())
+			return nil, errors.New("Internal Server error")
+		}
+		return nil, fmt.Errorf("You need to be in '%s' text channel to use this command", channel.Name)
+	}
+	if botInstance.BotVoiceConnection == nil {
+		voiceConnection, err := session.ChannelVoiceJoin(guildId, vChannelId, false, true)
+		if err != nil {
+			log.Printf("%s Failed to create voice connection. Got error: %s", logCtx, err.Error())
+			return nil, errors.New("Failed to join voice channel. Internal server error")
+		}
+		botInstance.BotVoiceConnection = voiceConnection
+		return botInstance, nil
+	}
+
+	// check if correct voice channel
+	if botInstance.VoiceChannelId != vChannelId {
+		log.Printf("%s command received from different voice channel", logCtx)
+		channel, err := session.Channel(botInstance.VoiceChannelId)
+		if err != nil {
+			log.Printf("%s Failed to get text channel information. Got error: %s", logCtx, err.Error())
+			return nil, errors.New("Internal Server error")
+		}
+		return nil, fmt.Errorf("You need to be in '%s' text channel to use this command", channel.Name)
+	}
+	return botInstance, nil
+}
+
+func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate, playNow bool) (*common.Song, error) {
 	options := interaction.ApplicationCommandData().Options
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
-	log.Printf("Guild ID: %s, vChannel ID: %s", guildId, vChannelId)
-	if vChannelId == "" {
-		return nil, errors.New("user needs to be in voice channel")
+	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
+	log.Printf("%s 'Play' command received", logCtx)
+
+	// create bot instance and connect to voice channel if not there
+	botInstance, err := createAndGetBotInstance(session, interaction, true)
+	if err != nil {
+		return nil, err
 	}
+
+	option := options[0]
+
+	log.Printf("Got option: [%s]", option.StringValue())
+
+	// search youtube for song
+	songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("Couldn't find the song for query '%s'", option.StringValue())
+		log.Printf("%s, error: [%s]", errMsg, err.Error())
+		return nil, fmt.Errorf(errMsg)
+	}
+	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning
+	// send signal to songsig channel
+	songSig <- &SongSignal{
+		song:        songs[0],
+		botInstance: botInstance,
+		playNow:     playNow,
+	}
+	// send skip signal if playNow is true
+	if playNow {
+		botInstance.Queue.skip <- nil
+	}
+	return songs[0], nil
+}
+
+func PlayUrlCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate, playNow bool) (*common.Song, error) {
+	options := interaction.ApplicationCommandData().Options
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
+	log.Printf("%s 'Play-url' command received", logCtx)
+
+	// create bot instance and connect to voice channel if not there
+	botInstance, err := createAndGetBotInstance(session, interaction, true)
+	if err != nil {
+		return nil, err
+	}
+
+	// extract option values
 	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
 	for _, option := range options {
 		optionMap[option.Name] = option
 	}
-	log.Printf("'Play' command received")
 
-	if _, ok := optionMap[SongQueryOptionName]; !ok {
-		return nil, errors.New("You need to specify song query to play a song")
+	if _, ok := optionMap[SongUrlOption]; !ok {
+		return nil, errors.New("You need to specify a URL to play a song")
 	}
-	option := optionMap[SongQueryOptionName]
+	option := optionMap[SongUrlOption]
 
-	log.Printf("Got option: [%s]", option.StringValue())
+	log.Printf("%s Got option: [%s]", logCtx, option.StringValue())
 
-	// create bot instance and connect to voice channel if not there
-
-	// make bot instance for guild if not present
-	if botInstance, ok := BotInstances[guildId]; !ok {
-		botVoiceConnection, err := session.ChannelVoiceJoin(guildId, vChannelId, false, false)
-		if err != nil {
-			log.Printf("Failed to join voice channel with id [%s]. Got error: [%s]", vChannelId, err.Error())
-			return nil, errors.New("Failed to join voice channel. Internal server error")
-		}
-		newBotInstance := NewBotInstance(session, guildId, interaction.ChannelID, vChannelId, false, botVoiceConnection)
-		BotInstances[guildId] = newBotInstance
-		defer botVoiceConnection.Close()
-	} else if botInstance.BotVoiceConnection == nil {
-		botVoiceConnection, err := session.ChannelVoiceJoin(guildId, vChannelId, false, false)
-		if err != nil {
-			log.Printf("Failed to join voice channel with id [%s]. Got error: [%s]", vChannelId, err.Error())
-			return nil, errors.New("Failed to join voice channel. Internal server error")
-		}
-		botInstance.BotVoiceConnection = botVoiceConnection
-		defer botVoiceConnection.Close()
-	} else {
-		// if instance already exists check if bot present in same voice channel
-		if vChannelId != botInstance.VoiceChannelId {
-			channel, err := session.Channel(botInstance.VoiceChannelId)
-			if err != nil {
-				errMsg := "Failed to get current voice channel info."
-				log.Printf("%s, got error: [%s]", errMsg, err.Error())
-				return nil, errors.New(errMsg)
-			}
-			return nil, fmt.Errorf("You must be in '%s' voice channel", channel.Name)
-		}
-		// check if command issued from same text channel
-		if interaction.ChannelID != botInstance.TextChannelId {
-			channel, err := session.Channel(botInstance.TextChannelId)
-			if err != nil {
-				errMsg := "Failed to get text channel info"
-				log.Printf("%s, got error: [%s]", errMsg, err.Error())
-				return nil, errors.New(errMsg)
-			}
-			return nil, fmt.Errorf("You must be in '%s' text channel to issue this command", channel.Name)
-		}
+	// search youtube for song
+	song, err := musicmanager.GetSongWithStreamUrl(option.StringValue(), interaction.Member.User.Username)
+	if err != nil {
+		log.Printf("%s Failed to get song stream url for youtube url '%s'. Got error: %s", logCtx, option.StringValue(), err.Error())
+		return nil, fmt.Errorf("Couldn't find song for url '%s'", option.StringValue())
 	}
-
-	botInstance := BotInstances[guildId]
-
-	songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
 
 	if err != nil {
 		errMsg := "Couldn't find the requested song"
@@ -86,27 +152,59 @@ func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		return nil, fmt.Errorf(errMsg)
 	}
 	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning
-	// add to queue here
-	// for now play it to check if audio is received
-	botInstance.BotVoiceConnection.Speaking(true)
-	defer botInstance.BotVoiceConnection.Speaking(false)
-	done := make(chan error)
-	botInstance.AudioStream = NewAudioStream(songs[0], botInstance.BotVoiceConnection, done)
-
-	ticker := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case err := <-done:
-			if err != nil && err != io.EOF {
-				// send stop signal to Audio stream
-				log.Printf("Error while sending packets: %s", err.Error())
-				botInstance.AudioStream.stop <- true
-				return songs[0], err
-			}
-			log.Printf("finished playing")
-			return songs[0], nil
-		case <-ticker.C:
-			log.Printf("Playing: packets sent: %d", botInstance.AudioStream.framesSent)
-		}
+	// send signal to songsig channel
+	songSig <- &SongSignal{
+		song:        song,
+		botInstance: botInstance,
+		playNow:     playNow,
 	}
+	// send skip signal if playNow is true
+	if playNow {
+		botInstance.Queue.skip <- nil
+	}
+	return song, nil
+}
+
+func PauseCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'Pause' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return nil, err
+	}
+	// send signal on pause channel
+	botInstance.Queue.pause <- nil
+	return botInstance.Queue.nowPlaying.song, nil
+}
+
+func ResumeCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'Resume' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// send signal on pause channel
+	botInstance.Queue.resume <- nil
+	return botInstance.Queue.nowPlaying.song, nil
+}
+
+func SkipCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// send signal on pause channel
+	botInstance.Queue.skip <- nil
+	return botInstance.Queue.nowPlaying.song, nil
 }

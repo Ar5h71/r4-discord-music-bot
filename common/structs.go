@@ -11,5 +11,7 @@ type Song struct {
 	SongDuration  time.Duration
 	User          string
 	SongId        string
+	ChannelId     string
+	ChannelName   string
 	YoutubeSource bool
 }

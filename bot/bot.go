@@ -9,6 +9,7 @@ package bot
 
 import (
 	"log"
+	"sync"
 
 	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/Ar5h71/r4-music-bot/config"
@@ -23,21 +24,54 @@ type BotInstance struct {
 	VoiceChannelId     string
 	TextChannelId      string
 	Speaking           bool
-	AudioStream        *AudioStreamSession
+	Queue              *BotQueue
 	// add for queue and current playing song
+}
+
+// bot queue
+type BotQueue struct {
+	mtx sync.Mutex
+
+	songs      []*common.Song
+	paused     bool
+	nowPlaying *NowPlaying
+	skip       chan interface{}
+	stop       chan interface{}
+	pause      chan interface{}
+	resume     chan interface{}
+	done       chan interface{}
+}
+
+type NowPlaying struct {
+	song          *common.Song
+	streamSession *AudioStreamSession
+}
+
+// to send signal in a channel to play a song for an instance
+// thread is initiated in StartBot()
+type SongSignal struct {
+	song        *common.Song
+	botInstance *BotInstance
+	playNow     bool
 }
 
 var (
 	BotSession   *discordgo.Session
 	BotInstances = make(map[string]*BotInstance)
+	songSig      = make(chan *SongSignal)
 )
 
 func NewBotInstance(session *discordgo.Session,
 	guildId,
 	tChannelId,
 	vchannelId string,
-	speaking bool,
-	voiceConnection *discordgo.VoiceConnection) *BotInstance {
+	speaking bool) (*BotInstance, error) {
+
+	voiceConnection, err := session.ChannelVoiceJoin(guildId, vchannelId, false, true)
+	if err != nil {
+		log.Printf("[%s | %s] Failed to create voice connection. Got error: %s", guildId, vchannelId, err.Error())
+		return nil, err
+	}
 	return &BotInstance{
 		BotSession:         session,
 		GuildId:            guildId,
@@ -45,7 +79,16 @@ func NewBotInstance(session *discordgo.Session,
 		TextChannelId:      tChannelId,
 		Speaking:           speaking,
 		BotVoiceConnection: voiceConnection,
-	}
+		Queue: &BotQueue{
+			paused: false,
+			stop:   make(chan interface{}, 1),
+			done:   make(chan interface{}, 1),
+			skip:   make(chan interface{}, 1),
+			pause:  make(chan interface{}, 1),
+			resume: make(chan interface{}, 1),
+			songs:  make([]*common.Song, 0),
+		},
+	}, nil
 }
 
 // Create and open bot session and voice connection
@@ -78,6 +121,9 @@ func StartBot() error {
 		return err
 	}
 
+	// go routine for queue
+	go QueueInit(songSig)
+
 	return nil
 }
 
@@ -88,7 +134,7 @@ func RegisterCommands() error {
 	for idx, command := range commands {
 		cmd, err := BotSession.ApplicationCommandCreate(BotSession.State.User.ID, "", command)
 		if err != nil {
-			log.Printf("Cannot create '%v' command: %v", cmd.Name, err)
+			log.Printf("Cannot create '%v' command: %v", command.Name, err)
 			return err
 		}
 		log.Printf("Registered command: [%s]", cmd.Name)
@@ -121,4 +167,13 @@ func StopBot() {
 	if err := BotSession.Close(); err != nil {
 		log.Printf("Failed to close bot session. Got error: [%s]", err.Error())
 	}
+}
+
+// stop bot instance
+func StopBotInstance(botInstance *BotInstance) {
+	// disconnect from voice
+	log.Printf("disconnecting bot")
+	botInstance.BotVoiceConnection.Disconnect()
+	// remove botInstance from the map
+	delete(BotInstances, botInstance.GuildId)
 }

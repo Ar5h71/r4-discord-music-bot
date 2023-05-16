@@ -43,5 +43,5 @@ package bot
 // 		streaming: false,
 // 		encoded:   false,
 // 	}
-
+// 	go opusStream.encode()
 // }

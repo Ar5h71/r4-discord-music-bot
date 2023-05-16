@@ -19,7 +19,9 @@ type YTService struct {
 }
 
 var (
-	YtServiceClient = &YTService{}
+	YtServiceClient  = &YTService{}
+	downloadClient   = &youtubedr.Client{}
+	youtubeUrlPrefix = "https://www.youtube.com/watch?v="
 )
 
 // init youtube service client
@@ -37,7 +39,7 @@ func InitYoutubeClient() error {
 // Search single or multiple results
 func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*common.Song, error) {
 	// search for the query
-	ytServiceSearchListCall := ytservice.ytService.Search.List([]string{"id", "snippet"})
+	ytServiceSearchListCall := ytservice.ytService.Search.List([]string{"id"})
 	ytServiceSearchListCall.Q(query).Type("video").VideoCategoryId("10").MaxResults(resultNum)
 	ytSearchResponse, err := ytServiceSearchListCall.Do()
 	if err != nil {
@@ -51,33 +53,48 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 	var songs []*common.Song
 	for _, item := range ytSearchResponse.Items {
 		videoId := item.Id.VideoId
-		videoTitle := item.Snippet.Title
-		song := &common.Song{
-			SongId:        videoId,
-			SongTitle:     videoTitle,
-			User:          userName,
-			YoutubeSource: true,
-		}
 
-		// Get formats and their respective stream URLs
-		downloadClient := &youtubedr.Client{}
-		videoInfo, err := downloadClient.GetVideo("https://www.youtube.com/watch?v=" + song.SongId)
-		if err != nil {
-			log.Printf("Failed to get video info. Got error: [%s]", err.Error())
-		}
-		formats := videoInfo.Formats.WithAudioChannels().AudioChannels(2)
-		formats.Sort()
+		ytUrl := youtubeUrlPrefix + videoId
 
-		// take the best format after sorting
-		song.SongUrl, err = downloadClient.GetStreamURL(videoInfo, &formats[0])
+		song, err := GetSongWithStreamUrl(ytUrl, userName)
 		if err != nil {
-			log.Printf("Failed to fetch stream url for video with id '%s', title '%s'. Got error: %s",
-				song.SongId, song.SongTitle, err.Error())
-			return nil, fmt.Errorf("Couldn't find stream url for the song")
+			log.Printf("Failed to get song stream URL. Got error: %s", err.Error())
+			return nil, err
 		}
-		duration, _ := strconv.Atoi(formats[0].ApproxDurationMs)
-		song.SongDuration = time.Millisecond * time.Duration(duration)
 		songs = append(songs, song)
 	}
 	return songs, nil
+}
+
+func GetSongWithStreamUrl(url, userName string) (*common.Song, error) {
+	// get video info from url
+	videoInfo, err := downloadClient.GetVideo(url)
+	if err != nil {
+		log.Printf("Failed to get video info. Got error: [%s]", err.Error())
+	}
+	songId := videoInfo.ID
+	songTitle := videoInfo.Title
+	channelId := videoInfo.ChannelID
+	channelName := videoInfo.Author
+	formats := videoInfo.Formats.WithAudioChannels().AudioChannels(2)
+	formats.Sort()
+	// take the best format after sorting
+	songUrl, err := downloadClient.GetStreamURL(videoInfo, &formats[0])
+	if err != nil {
+		log.Printf("Failed to fetch stream url for video with id '%s', title '%s'. Got error: %s",
+			songId, songTitle, err.Error())
+		return nil, fmt.Errorf("Couldn't find stream url for the song")
+	}
+	duration, _ := strconv.Atoi(formats[0].ApproxDurationMs)
+	songDuration := time.Duration(duration) * time.Millisecond
+	return &common.Song{
+		SongUrl:       songUrl,
+		SongId:        songId,
+		SongTitle:     songTitle,
+		SongDuration:  songDuration,
+		User:          userName,
+		ChannelId:     channelId,
+		ChannelName:   channelName,
+		YoutubeSource: true,
+	}, nil
 }
