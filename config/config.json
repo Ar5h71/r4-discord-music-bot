@@ -1,8 +1,8 @@
 {
     "BotConfigStruct": {
-    "BotToken": "MTEwNzMxNTI4NzU4NzU3MzkzMw.GIPb6g.ZCYTg4tYrH-36HzPB9UFcfNmBBzwHpINsM7ulY"
+    "BotToken": ""
     },
     "YoutubeConfigStruct": {
-        "ApiKey": "AIzaSyAvcruwtL3ChGlfUQKKgAnEKA0BFS-Zh_w"
+        "ApiKey": ""
     }
 }
