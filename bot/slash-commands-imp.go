@@ -251,6 +251,8 @@ func SearchComponentHandler(session *discordgo.Session, interaction *discordgo.I
 			guildId, vChannelId, key)
 		return nil, err
 	}
+	// delete the key from the map to avoid memory leak
+	delete(searchResults, key)
 	song := songs[songIdx]
 	botInstance, err := createAndGetBotInstance(session, interaction, true)
 	if err != nil {

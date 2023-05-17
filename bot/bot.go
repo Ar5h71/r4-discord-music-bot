@@ -170,8 +170,16 @@ func RemoveCommands() error {
 	return nil
 }
 
+func StopBotInstances() {
+	for _, botInstance := range BotInstances {
+		StopBotInstance(botInstance)
+	}
+	return
+}
+
 // stop session for the bot
 func StopBot() {
+	StopBotInstances()
 	if err := BotSession.Close(); err != nil {
 		log.Printf("Failed to close bot session. Got error: [%s]", err.Error())
 	}
@@ -181,6 +189,7 @@ func StopBot() {
 func StopBotInstance(botInstance *BotInstance) {
 	// disconnect from voice
 	log.Printf("disconnecting bot")
+	botInstance.Queue.stop <- nil
 	botInstance.BotVoiceConnection.Disconnect()
 	// remove botInstance from the map
 	delete(BotInstances, botInstance.GuildId)
