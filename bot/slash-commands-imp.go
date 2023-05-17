@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/Ar5h71/r4-music-bot/musicmanager"
@@ -27,7 +28,7 @@ func createAndGetBotInstance(session *discordgo.Session, interaction *discordgo.
 	// if create flag is false, return with error
 	if !ok {
 		if !create {
-			log.Printf("%s, Create flag se to false. Returning", logCtx)
+			log.Printf("%s, Create flag set to false. Returning", logCtx)
 			return nil, errors.New("Play a song first to use this command")
 		}
 		log.Printf("%s Creating bot instance.", logCtx)
@@ -89,7 +90,7 @@ func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 
 	option := options[0]
 
-	log.Printf("Got option: [%s]", option.StringValue())
+	log.Printf("%s Got option: [%s]", logCtx, option.StringValue())
 
 	// search youtube for song
 	songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
@@ -165,36 +166,125 @@ func PlayUrlCommandHandler(session *discordgo.Session, interaction *discordgo.In
 	return song, nil
 }
 
-func PauseCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+func PauseCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
 	log.Printf("[%s | %s]. 'Pause' command received", guildId, vChannelId)
 
 	botInstance, err := createAndGetBotInstance(session, interaction, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// send signal on pause channel
 	botInstance.Queue.pause <- nil
-	return botInstance.Queue.nowPlaying.song, nil
+	return nil
 }
 
-func ResumeCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+func ResumeCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
 	log.Printf("[%s | %s]. 'Resume' command received", guildId, vChannelId)
 
 	botInstance, err := createAndGetBotInstance(session, interaction, false)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// send signal on pause channel
 	botInstance.Queue.resume <- nil
-	return botInstance.Queue.nowPlaying.song, nil
+	return nil
 }
 
-func SkipCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+func SkipCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return err
+	}
+
+	// send signal on pause channel
+	botInstance.Queue.skip <- nil
+	return nil
+}
+
+func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) ([]*common.Song, error) {
+	options := interaction.ApplicationCommandData().Options
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
+	log.Printf("%s 'Search' command received", logCtx)
+
+	option := options[0]
+
+	log.Printf("%s Got option: [%s]", logCtx, option.StringValue())
+
+	// search youtube for song
+	songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 10)
+
+	if err != nil {
+		errMsg := fmt.Sprintf("Couldn't find the songs for query '%s'", option.StringValue())
+		log.Printf("%s, error: [%s]", errMsg, err.Error())
+		return nil, fmt.Errorf(errMsg)
+	}
+
+	return songs, nil
+}
+
+func SearchComponentHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*common.Song, error) {
+	data := interaction.MessageComponentData()
+	guildId := interaction.GuildID
+	userId := interaction.Member.User.ID
+	vChannelId := SearchVoiceChannelId(userId)
+	songIdx, err := strconv.Atoi(data.Values[0])
+	if err != nil {
+		log.Printf("[%s | %s] Failed to parse song index '%s' to integer. Got error [%s]",
+			guildId, vChannelId, data.Values[0], err.Error())
+		return nil, err
+	}
+	key := fmt.Sprintf("%s_%s", guildId, userId)
+	songs, ok := searchResults[key]
+	if !ok {
+		log.Printf("[%s | %s] Failed to find songs for key '%s'",
+			guildId, vChannelId, key)
+		return nil, err
+	}
+	song := songs[songIdx]
+	botInstance, err := createAndGetBotInstance(session, interaction, true)
+	if err != nil {
+		log.Printf("[%s | %s] Failed to create bot instance. Got error: [%s]",
+			guildId, vChannelId, err.Error())
+	}
+	log.Printf("[%s | %s] Adding song '%s' to playlist",
+		guildId, vChannelId, song.SongTitle)
+
+	// send signal to add song to queue
+	songSig <- &SongSignal{
+		song:        song,
+		botInstance: botInstance,
+		playNow:     false,
+	}
+	return song, nil
+}
+
+func EmptyQueueHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return err
+	}
+
+	// send stop signal to queue
+	botInstance.Queue.stop <- nil
+	return nil
+}
+
+func ShowQueueHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) ([]*common.Song, error) {
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
 	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
@@ -204,7 +294,8 @@ func SkipCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		return nil, err
 	}
 
-	// send signal on pause channel
-	botInstance.Queue.skip <- nil
-	return botInstance.Queue.nowPlaying.song, nil
+	songs := make([]*common.Song, 0)
+	songs = append(songs, botInstance.Queue.nowPlaying.song)
+	songs = append(songs, botInstance.Queue.songs...)
+	return songs, nil
 }

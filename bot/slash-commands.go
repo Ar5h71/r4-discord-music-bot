@@ -9,8 +9,8 @@ package bot
 
 import (
 	"fmt"
-	"log"
 
+	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -23,8 +23,9 @@ const (
 	PauseCommand      = "pause"
 	SkipCommand       = "skip"
 	ShowQueueCommand  = "show-queue"
-	EmptyQueueCommand = "empty-queue"
+	StopQueueCommand  = "stop-queue"
 	ResumeCommand     = "resume"
+	SearchCommand     = "search"
 )
 
 // option name constants
@@ -36,12 +37,17 @@ const (
 
 // constants for responses
 const (
-	PleaseWait = "Please Wait..."
+	InternalServerError = "Internal Server Error"
+	SkipTrack           = "Skipping current playing track"
+	PauseTrack          = "Pausing current playing track"
+	ResumeTrack         = "Resuming current paused track"
+	StopQueue           = "Stopping queue. Removing all tracks"
 )
 
-// constants for component handlers
+// constants for search command
 const (
-	SearchComponent = "search_component"
+	SearchComponent    = "search_component"
+	searchSelectHeader = "Please select a track to be added to queue"
 )
 
 var (
@@ -109,12 +115,24 @@ var (
 			Description: "Show all songs in queue.",
 		},
 		{
-			Name:        EmptyQueueCommand,
+			Name:        StopQueueCommand,
 			Description: "Empty the queue and stop current playing song.",
 		},
 		{
 			Name:        ResumeCommand,
 			Description: "Resume current paused song",
+		},
+		{
+			Name:        SearchCommand,
+			Description: "Search for a song",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        SongQueryOptionName,
+					Description: "Query for song to be searched",
+					Required:    true,
+				},
+			},
 		},
 	}
 
@@ -122,52 +140,36 @@ var (
 	commandHandlers = map[string]func(session *discordgo.Session, interaction *discordgo.InteractionCreate){
 		PlayCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
 			song, err := PlayCommandHandler(session, interaction, false)
 
-			var msg string
 			if err != nil {
-				msg = err.Error()
-			} else {
-				msg = fmt.Sprintf("Adding to queue: Title - '%s', Channel - '%s', Requested by - '%s', duration - '%s'",
-					song.SongTitle, song.ChannelName, song.User, song.SongDuration.String())
+				msg := fmt.Sprintf("`%s`", err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
 			}
-			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msg,
-			})
 
+			addToQueueInteractionResponse(session, interaction, song)
 		},
 		PlayUrlCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
 			song, err := PlayUrlCommandHandler(session, interaction, false)
 
-			msg := ""
 			if err != nil {
-				msg = err.Error()
-			} else {
-				msg = fmt.Sprintf("Adding to queue: Title - '%s', Channel - '%s', Requested by - '%s', duration - '%s'",
-					song.SongTitle, song.ChannelName, song.User, song.SongDuration.String())
+				msg := fmt.Sprintf("`%s`", err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
 			}
-
-			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msg,
-			})
+			addToQueueInteractionResponse(session, interaction, song)
 		},
 		PlayNowCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
 			song, err := PlayCommandHandler(session, interaction, true)
 
@@ -183,10 +185,7 @@ var (
 		},
 		PlayNowUrlCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
 			song, err := PlayUrlCommandHandler(session, interaction, true)
 
@@ -203,88 +202,159 @@ var (
 
 		PauseCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
-			song, err := PauseCommandHandler(session, interaction)
-			var msgFmt string
+			err := PauseCommandHandler(session, interaction)
+
 			if err != nil {
-				msgFmt = err.Error()
-			} else {
-				msgFmt = fmt.Sprintf("Paused song '%s'", song.SongTitle)
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
 			}
 
+			msg := common.Boldify(PauseTrack)
 			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msgFmt,
+				Content: &msg,
 			})
 		},
 		SkipCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
-			song, err := SkipCommandHandler(session, interaction)
-			var msgFmt string
+			err := SkipCommandHandler(session, interaction)
 			if err != nil {
-				msgFmt = err.Error()
-			} else {
-				msgFmt = fmt.Sprintf("Skipped song '%s'", song.SongTitle)
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
 			}
 
+			msg := common.Boldify(SkipTrack)
 			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msgFmt,
+				Content: &msg,
 			})
 		},
 		ShowQueueCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
-			msgFmt := "'Show-queue' command received with option value: "
-			log.Printf("'Show-queue' command received")
 
-			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msgFmt,
-			})
+			songs, err := ShowQueueHandler(session, interaction)
+			if err != nil {
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
+			}
+
+			sendCurrentQueueInteractionResponse(session, interaction, songs)
 		},
-		EmptyQueueCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+		StopQueueCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
-				},
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
-			msgFmt := "'Empty-queue' command received with option value: "
-			log.Printf("'Empty-queue' command received")
+
+			err := EmptyQueueHandler(session, interaction)
+			if err != nil {
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
+			}
+
+			msg := common.Boldify(StopQueue)
 
 			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msgFmt,
+				Content: &msg,
 			})
 		},
 		ResumeCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			})
+			err := ResumeCommandHandler(session, interaction)
+
+			if err != nil {
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
+			}
+
+			msg := common.Boldify(ResumeTrack)
+			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+				Content: &msg,
+			})
+		},
+		SearchCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: PleaseWait,
+					Flags: 1000000,
 				},
 			})
-			song, err := ResumeCommandHandler(session, interaction)
-			var msgFmt string
+			songs, err := SearchCommandHandler(session, interaction)
 			if err != nil {
-				msgFmt = err.Error()
-			} else {
-				msgFmt = fmt.Sprintf("Resumed song '%s'", song.SongTitle)
+				msg := err.Error()
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
+			}
+
+			// store searched songs in searchResults map to avoid duplicate api call
+			searchResults[fmt.Sprintf("%s_%s", interaction.GuildID, interaction.Member.User.ID)] = songs
+
+			// generate a select menu for searched songs
+			var selectMenuOptions = make([]discordgo.SelectMenuOption, 0)
+			for idx, song := range songs {
+				selectMenuOptions = append(selectMenuOptions, discordgo.SelectMenuOption{
+					Label:       song.SongTitle,
+					Value:       fmt.Sprintf("%d", idx),
+					Description: song.ChannelName,
+				})
+			}
+			searchSelectMenuComponent := []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.SelectMenu{
+							CustomID:    SearchComponent,
+							Placeholder: searchSelectHeader,
+							Options:     selectMenuOptions,
+						},
+					},
+				},
 			}
 
 			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-				Content: &msgFmt,
+				Components: &searchSelectMenuComponent,
 			})
+		},
+	}
+	componentHandlers = map[string]func(session *discordgo.Session, interaction *discordgo.InteractionCreate){
+		SearchComponent: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+
+			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			})
+			song, err := SearchComponentHandler(session, interaction)
+
+			if err != nil {
+				msg := common.Boldify(InternalServerError)
+				session.InteractionResponseEdit(interaction.Interaction,
+					&discordgo.WebhookEdit{
+						Content: &msg,
+					})
+				return
+			}
+
+			addToQueueInteractionResponse(session, interaction, song)
 		},
 	}
 	RegisteredCommands = make([]*discordgo.ApplicationCommand, len(commands))

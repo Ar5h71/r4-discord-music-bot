@@ -9,12 +9,15 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 )
 
 const (
-	ConfigPath = "config/config.json"
-	BotPrefix  = "Bot "
+	ConfigPath              = "config/config.json"
+	BotPrefix               = "Bot "
+	YoutubeVideoURLPrefix   = "https://www.youtube.com/watch?v="
+	YoutubeChannelURLPrefix = "https://www.youtube.com/channel/"
 )
 
 // function to pretty print structs
@@ -25,4 +28,9 @@ func PrettyPrint(iface interface{}) string {
 		return ""
 	}
 	return string(prettyStruct)
+}
+
+// function to send formatted string of text in markdown
+func Boldify(msg string) string {
+	return fmt.Sprintf("**%s**", msg)
 }

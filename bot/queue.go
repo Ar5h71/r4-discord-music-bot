@@ -96,10 +96,9 @@ func (botInstance *BotInstance) skipSong() {
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
 	if botInstance.Queue.nowPlaying == nil {
-		// nothing is playing
-		// todo: send message on channel
 		log.Printf("[%s | %s] Nothing is playing",
 			botInstance.GuildId, botInstance.TextChannelId)
+		sendMessageToChannel(botInstance, "No song is playing. Nothing to skip")
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.stop <- nil
@@ -122,16 +121,16 @@ func (botInstance *BotInstance) stopQueue() {
 		botInstance.Queue.nowPlaying = nil
 		nothingToStop = false
 	}
-	if len(botInstance.Queue.songs) == 0 {
+	if len(botInstance.Queue.songs) != 0 {
 		log.Printf("[%s | %s] Removing all songs",
 			botInstance.GuildId, botInstance.TextChannelId)
 		botInstance.Queue.songs = make([]*common.Song, 0)
 		nothingToStop = false
 	}
 	if nothingToStop {
-		// send message to the channel in both cases
 		log.Printf("[%s | %s] Nothing to stop",
 			botInstance.GuildId, botInstance.VoiceChannelId)
+		sendMessageToChannel(botInstance, "No songs in queue. Nothing to stop")
 		return
 	}
 }
@@ -143,15 +142,15 @@ func (botInstance *BotInstance) pauseSong() {
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
 	if botInstance.Queue.nowPlaying == nil {
-		// send appropriate message on channel
 		log.Printf("[%s | %s] Nothing to pause",
 			botInstance.GuildId, botInstance.VoiceChannelId)
+		sendMessageToChannel(botInstance, "No song is playing. Nothing to pause")
 		return
 	}
 	if botInstance.Queue.paused {
 		log.Printf("[%s | %s] Already paused",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		// send message to channel
+		sendMessageToChannel(botInstance, "Queue is already paused")
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.pauseStream()
@@ -168,18 +167,17 @@ func (botInstance *BotInstance) resumeSong() {
 	if !botInstance.Queue.paused {
 		log.Printf("[%s | %s] Already playing",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		// send message to channel
+		sendMessageToChannel(botInstance, "Queue is already playing")
 		return
 	}
 	if botInstance.Queue.nowPlaying == nil {
 		log.Printf("[%s | %s] Nothing to resume",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		// send messge to channel
+		sendMessageToChannel(botInstance, "Queue is already playing. Nothing to resume")
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.resumeStream()
 	botInstance.Queue.paused = false
-	// send message to channel
 }
 
 // play next song in queue
@@ -209,7 +207,7 @@ func (botInstance *BotInstance) playNext() {
 		song:          song,
 		streamSession: NewAudioStream(song, botInstance.BotVoiceConnection, done),
 	}
-	// send message to channel here
+	sendCurrentPlayingSongMessage(botInstance, song)
 
 	go func() {
 		// wait for done channel here

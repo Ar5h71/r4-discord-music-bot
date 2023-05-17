@@ -56,9 +56,10 @@ type SongSignal struct {
 }
 
 var (
-	BotSession   *discordgo.Session
-	BotInstances = make(map[string]*BotInstance)
-	songSig      = make(chan *SongSignal)
+	BotSession    *discordgo.Session
+	BotInstances  = make(map[string]*BotInstance)
+	songSig       = make(chan *SongSignal)
+	searchResults = make(map[string][]*common.Song)
 )
 
 func NewBotInstance(session *discordgo.Session,
@@ -105,8 +106,15 @@ func StartBot() error {
 
 	// add handler for command handlers
 	BotSession.AddHandler(func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-		if handler, ok := commandHandlers[interaction.ApplicationCommandData().Name]; ok {
-			handler(session, interaction)
+		switch interaction.Type {
+		case discordgo.InteractionApplicationCommand:
+			if handler, ok := commandHandlers[interaction.ApplicationCommandData().Name]; ok {
+				handler(session, interaction)
+			}
+		case discordgo.InteractionMessageComponent:
+			if handler, ok := componentHandlers[interaction.MessageComponentData().CustomID]; ok {
+				handler(session, interaction)
+			}
 		}
 	})
 

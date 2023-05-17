@@ -19,9 +19,8 @@ type YTService struct {
 }
 
 var (
-	YtServiceClient  = &YTService{}
-	downloadClient   = &youtubedr.Client{}
-	youtubeUrlPrefix = "https://www.youtube.com/watch?v="
+	YtServiceClient = &YTService{}
+	downloadClient  = &youtubedr.Client{}
 )
 
 // init youtube service client
@@ -54,7 +53,7 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 	for _, item := range ytSearchResponse.Items {
 		videoId := item.Id.VideoId
 
-		ytUrl := youtubeUrlPrefix + videoId
+		ytUrl := common.YoutubeVideoURLPrefix + videoId
 
 		song, err := GetSongWithStreamUrl(ytUrl, userName)
 		if err != nil {
