@@ -1,4 +1,7 @@
-// common vars and structs for musicmanager package
+/*
+author: Arshdeep Singh
+E-mail: ad.sigh.arsh@gmail.com
+*/
 package musicmanager
 
 // audio specifications for streaming

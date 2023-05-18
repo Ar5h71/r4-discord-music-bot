@@ -1,3 +1,8 @@
+/*
+author: Arshdeep Singh
+E-mail: ad.sigh.arsh@gmail.com
+*/
+
 package bot
 
 import (

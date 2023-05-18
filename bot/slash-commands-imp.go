@@ -108,7 +108,7 @@ func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 		playNow:     playNow,
 	}
 	// send skip signal if playNow is true
-	if playNow {
+	if playNow && botInstance.Queue.nowPlaying != nil {
 		botInstance.Queue.skip <- nil
 	}
 	return songs[0], nil
@@ -160,7 +160,7 @@ func PlayUrlCommandHandler(session *discordgo.Session, interaction *discordgo.In
 		playNow:     playNow,
 	}
 	// send skip signal if playNow is true
-	if playNow {
+	if playNow && botInstance.Queue.nowPlaying != nil {
 		botInstance.Queue.skip <- nil
 	}
 	return song, nil
@@ -227,6 +227,12 @@ func SearchCommandHandler(session *discordgo.Session, interaction *discordgo.Int
 	if err != nil {
 		errMsg := fmt.Sprintf("Couldn't find the songs for query '%s'", option.StringValue())
 		log.Printf("%s, error: [%s]", errMsg, err.Error())
+		return nil, fmt.Errorf(errMsg)
+	}
+
+	if len(songs) == 0 {
+		errMsg := fmt.Sprintf("Couldn't find the songs for query '%s'", option.StringValue())
+		log.Printf("%s", errMsg)
 		return nil, fmt.Errorf(errMsg)
 	}
 
