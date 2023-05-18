@@ -35,11 +35,12 @@ type AudioStreamSession struct {
 }
 
 var (
-	framerate     = 48000
-	framesize     = 960
-	frameduration = 20
-	numChannels   = 2
-	maxBytes      = framesize * (frameduration / 20) * numChannels
+	framerate        = 48000
+	framesize        = 960
+	frameduration    = 20
+	audioBitRateKbps = 64
+	numChannels      = 2
+	maxBytes         = framesize * (frameduration / 20) * numChannels
 )
 
 func NewAudioStream(song *common.Song, voice *discordgo.VoiceConnection, done chan error) *AudioStreamSession {
@@ -68,6 +69,7 @@ func (audioStream *AudioStreamSession) stream() {
 		"-ar", strconv.Itoa(int(framerate)),
 		"-ac", strconv.Itoa(int(numChannels)),
 		"-frame_duration", strconv.Itoa(int(frameduration)),
+		"-b:a", strconv.Itoa(audioBitRateKbps * 1000),
 		"pipe:1",
 	}
 
