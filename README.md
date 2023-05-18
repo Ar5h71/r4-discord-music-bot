@@ -10,6 +10,16 @@ A multi server discord music bot made using golang
 
 ## Steps to use
 
+- Create a json file `config/config.json` and add your bot token and youtube api key in the following format.
+
+````{
+    "BotConfigStruct": {
+    "BotToken": ""
+    },
+    "YoutubeConfigStruct": {
+        "ApiKey": ""
+    }
+}```
 - Add your `bot token` and `youtube api key` and in `config.json`
 - Run command `docker build -t <image-name>` to build the project. Replace `<image-name>` with any image name you want to give.
 - Run the bot using the command `docker run <image-name>`. To run in detached mode, use `docker run -d <image-name>`
@@ -20,3 +30,4 @@ A multi server discord music bot made using golang
 - https://github.com/bwmarrin/dgvoice
 - https://github.com/layeh/gopus
 - https://github.com/ljgago/MusicBot
+````
