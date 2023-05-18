@@ -30,10 +30,10 @@ func addToQueueInteractionResponse(session *discordgo.Session, interaction *disc
 	channelUrl := common.YoutubeChannelURLPrefix + song.ChannelId
 	var msg string
 	if playNow {
-		msg = fmt.Sprintf("**Adding to Queue Top** \n\n`%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`",
+		msg = fmt.Sprintf(">>> **Adding to Queue Top** \n\n`%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`",
 			song.SongDuration.String(), song.SongTitle, videoUrl, song.ChannelName, channelUrl, song.User)
 	} else {
-		msg = fmt.Sprintf("**Adding to Queue** \n\n`%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`",
+		msg = fmt.Sprintf(">>> **Adding to Queue** \n\n`%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`",
 			song.SongDuration.String(), song.SongTitle, videoUrl, song.ChannelName, channelUrl, song.User)
 	}
 	_, err := session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
@@ -44,7 +44,7 @@ func addToQueueInteractionResponse(session *discordgo.Session, interaction *disc
 
 // send 'current playing song' message
 func sendCurrentPlayingSongMessage(botInstance *BotInstance, song *common.Song) {
-	msg := fmt.Sprintf("**Playing** \n\n`%s` -- `%s` | `%s` | Requested by -- `%s`",
+	msg := fmt.Sprintf(">>> **Playing** \n\n`%s` -- `%s` | `%s` | Requested by -- `%s`",
 		song.SongDuration.String(), song.SongTitle, song.ChannelName, song.User)
 
 	_, err := botInstance.BotSession.ChannelMessageSend(botInstance.TextChannelId, msg)
@@ -67,7 +67,7 @@ func sendMessageToChannel(botInstance *BotInstance, msg string) {
 func sendCurrentQueueInteractionResponse(session *discordgo.Session, interaction *discordgo.InteractionCreate, songs []*common.Song) error {
 	videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, songs[0].SongId)
 	channelUrl := fmt.Sprintf("%s%s", common.YoutubeChannelURLPrefix, songs[0].ChannelId)
-	msg := fmt.Sprintf("**Current Tracks in Queue**\n\n**Now Playing**\n%s -- [%s](<%s>) | [%s](<%s> | Requested by -- `%s`\n\n",
+	msg := fmt.Sprintf(">>> **Current Tracks in Queue**\n\n**Now Playing**\n%s -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`\n\n",
 		songs[0].SongDuration.String(), songs[0].SongTitle, videoUrl, songs[0].ChannelName, channelUrl, songs[0].User)
 
 	if len(songs) > 1 {
@@ -75,7 +75,7 @@ func sendCurrentQueueInteractionResponse(session *discordgo.Session, interaction
 		for idx, song := range songs[1:] {
 			videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, song.SongId)
 			channelUrl := fmt.Sprintf("%s%s", common.YoutubeChannelURLPrefix, song.ChannelId)
-			msg += fmt.Sprintf("%d. `%s` -- [%s](<%s>) | [%s](<%s> | Requested by -- `%s`)\n",
+			msg += fmt.Sprintf("%d. `%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`)\n",
 				idx+1, song.SongDuration.String(), song.SongTitle, videoUrl, song.ChannelName, channelUrl, song.User)
 		}
 	}
@@ -108,7 +108,7 @@ func sendSearchResultsContentAndSelect(session *discordgo.Session, interaction *
 		},
 	}
 
-	msg := "**Search Results\n\n**"
+	msg := ">>> **Search Results\n\n**"
 	if len(songs) > 1 {
 		for idx, song := range songs {
 			videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, song.SongId)
