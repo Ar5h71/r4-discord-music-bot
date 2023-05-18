@@ -8,32 +8,43 @@ E-mail: ad.sigh.arsh@gmail.com
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"os/signal"
 
 	"github.com/Ar5h71/r4-music-bot/bot"
-	"github.com/Ar5h71/r4-music-bot/config"
 	"github.com/Ar5h71/r4-music-bot/musicmanager"
 )
+
+var (
+	botToken      string
+	youtubeAPIKey string
+)
+
+func init() {
+	flag.StringVar(&botToken, "bottoken", "", "Token for discord bot")
+	flag.StringVar(&youtubeAPIKey, "youtubeapikey", "", "API key for youtube APIs")
+}
 
 func main() {
 	log.Printf("************************Starting Bot************************")
 
-	// setup config for bot
-	err := config.InitConfig()
-	if err != nil {
-		log.Panicf("Failed to initialize config. Got error: [%s]", err.Error())
+	flag.Parse()
+	if botToken == "" {
+		log.Panicf("Please enter bot token")
 	}
-
+	if youtubeAPIKey == "" {
+		log.Panicf("Please enter youtube api key")
+	}
 	// init youtube service client
-	err = musicmanager.InitYoutubeClient()
+	err := musicmanager.InitYoutubeClient(youtubeAPIKey)
 	if err != nil {
 		log.Panicf("Failed to init youtube client. Got error: [%s]", err.Error())
 	}
 
 	// start session for bot
-	err = bot.StartBot()
+	err = bot.StartBot(botToken)
 	if err != nil {
 		log.Panicf("Failed to start bot: Got error: [%s]", err.Error())
 	}

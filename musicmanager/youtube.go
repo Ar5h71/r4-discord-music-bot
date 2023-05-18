@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/Ar5h71/r4-music-bot/common"
-	"github.com/Ar5h71/r4-music-bot/config"
 	youtubedr "github.com/kkdai/youtube/v2"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
@@ -29,10 +28,11 @@ var (
 )
 
 // init youtube service client
-func InitYoutubeClient() error {
+func InitYoutubeClient(youtubeAPIKey string) error {
+	log.Printf("Initializing youtube client...")
 	ctx := context.Background()
 	var err error
-	YtServiceClient.ytService, err = youtube.NewService(ctx, option.WithAPIKey(config.Config.YoutubeConfig.ApiKey))
+	YtServiceClient.ytService, err = youtube.NewService(ctx, option.WithAPIKey(youtubeAPIKey))
 	if err != nil {
 		log.Printf("Failed to create youtube service. Got error: [%s]", err.Error())
 		return err

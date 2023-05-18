@@ -6,6 +6,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN CGO_ENABLED=1 go build -o musicbot
+RUN CGO_ENABLED=1 go build -o musicbot main.go
 
-ENTRYPOINT ["./musicbot"]
+CMD ["./musicbot", "-bottoken=<bot token here>", "-youtubeapikey=<youtube api key here>"]

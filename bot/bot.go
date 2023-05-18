@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/Ar5h71/r4-music-bot/common"
-	"github.com/Ar5h71/r4-music-bot/config"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -93,12 +92,12 @@ func NewBotInstance(session *discordgo.Session,
 }
 
 // Create and open bot session and voice connection
-func StartBot() error {
+func StartBot(botToken string) error {
 	log.Printf("Initializing bot session.")
 	var err error
 
 	// Create session
-	BotSession, err = discordgo.New(common.BotPrefix + config.Config.BotConfig.BotToken)
+	BotSession, err = discordgo.New(common.BotPrefix + botToken)
 	if err != nil {
 		log.Printf("Failed to start new session for bot. Got error: [%s]", err.Error())
 		return err
