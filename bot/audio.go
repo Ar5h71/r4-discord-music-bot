@@ -38,7 +38,7 @@ var (
 	framerate        = 48000
 	framesize        = 960
 	frameduration    = 20
-	audioBitRateKbps = 32
+	audioBitRateKbps = 24
 	numChannels      = 2
 	maxBytes         = framesize * (frameduration / 20) * numChannels
 )
