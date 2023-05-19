@@ -38,7 +38,7 @@ var (
 	framerate        = 48000
 	framesize        = 960
 	frameduration    = 20
-	audioBitRateKbps = 64
+	audioBitRateKbps = 32
 	numChannels      = 2
 	maxBytes         = framesize * (frameduration / 20) * numChannels
 )
@@ -65,6 +65,7 @@ func (audioStream *AudioStreamSession) stream() {
 
 	args := []string{
 		"-i", audioStream.song.SongUrl,
+		"-vn",
 		"-f", "s16le",
 		"-ar", strconv.Itoa(int(framerate)),
 		"-ac", strconv.Itoa(int(numChannels)),
