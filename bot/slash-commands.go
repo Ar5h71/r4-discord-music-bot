@@ -149,6 +149,7 @@ var (
 				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
 					Content: &msg,
 				})
+				return
 			}
 
 			addToQueueInteractionResponse(session, interaction, song, false)
@@ -164,6 +165,7 @@ var (
 				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
 					Content: &msg,
 				})
+				return
 			}
 			addToQueueInteractionResponse(session, interaction, song, false)
 		},

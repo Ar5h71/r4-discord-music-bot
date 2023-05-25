@@ -38,8 +38,12 @@ var (
 	framerate        = 48000
 	framesize        = 960
 	frameduration    = 20
-	audioBitRateKbps = 24
+	audioBitRateKbps = 64
 	numChannels      = 2
+	compressionLevel = 10
+	vbr              = "on"
+	application      = "audio"
+	bufferLen        = 100
 	maxBytes         = framesize * (frameduration / 20) * numChannels
 )
 
@@ -65,12 +69,19 @@ func (audioStream *AudioStreamSession) stream() {
 
 	args := []string{
 		"-i", audioStream.song.SongUrl,
+		"-reconnect", "1",
+		"-reconnect_at_eof", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "2",
 		"-vn",
 		"-f", "s16le",
+		"-vbr", vbr,
+		"-compression_level", strconv.Itoa(compressionLevel),
 		"-ar", strconv.Itoa(int(framerate)),
 		"-ac", strconv.Itoa(int(numChannels)),
 		"-frame_duration", strconv.Itoa(int(frameduration)),
 		"-b:a", strconv.Itoa(audioBitRateKbps * 1000),
+		"-application", application,
 		"pipe:1",
 	}
 
