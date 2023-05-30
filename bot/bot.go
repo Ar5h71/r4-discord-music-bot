@@ -33,6 +33,7 @@ type BotQueue struct {
 
 	songs      []*common.Song
 	paused     bool
+	autoplay   bool
 	nowPlaying *NowPlaying
 	skip       chan interface{}
 	stop       chan interface{}
@@ -44,6 +45,7 @@ type BotQueue struct {
 type NowPlaying struct {
 	song          *common.Song
 	streamSession *AudioStreamSession
+	finished      bool
 }
 
 // to send signal in a channel to play a song for an instance

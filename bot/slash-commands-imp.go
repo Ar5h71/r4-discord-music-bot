@@ -307,3 +307,25 @@ func ShowQueueHandler(session *discordgo.Session, interaction *discordgo.Interac
 	songs = append(songs, botInstance.Queue.songs...)
 	return songs, nil
 }
+
+func AutoplayCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (bool, error) {
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	log.Printf("[%s | %s]. 'autoplay' command received", guildId, vChannelId)
+
+	botInstance, err := createAndGetBotInstance(session, interaction, false)
+	if err != nil {
+		return false, err
+	}
+
+	botInstance.Queue.mtx.Lock()
+	if botInstance.Queue.autoplay {
+		log.Printf("[%s | %s]. Turning off autoplay", guildId, vChannelId)
+		botInstance.Queue.autoplay = false
+	} else {
+		botInstance.Queue.autoplay = true
+		log.Printf("[%s | %s]. Turning on autoplay", guildId, vChannelId)
+	}
+	botInstance.Queue.mtx.Unlock()
+	return botInstance.Queue.autoplay, nil
+}

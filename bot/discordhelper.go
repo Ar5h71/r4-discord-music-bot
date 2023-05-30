@@ -124,3 +124,18 @@ func sendSearchResultsContentAndSelect(session *discordgo.Session, interaction *
 	})
 	return err
 }
+
+func sendAutoplayResponse(session *discordgo.Session, interaction *discordgo.InteractionCreate, autoplay bool) error {
+	// check if autoplay turned on or off
+	var msg string
+	if autoplay {
+		msg = "Turned on autoplay. Songs will play on recommendations for the current playing song."
+	} else {
+		msg = "Turned off autoplay. Songs will play based on queue."
+	}
+	msg = common.Boldify(msg)
+	_, err := session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+		Content: &msg,
+	})
+	return err
+}

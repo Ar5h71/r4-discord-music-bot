@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Ar5h71/r4-music-bot/common"
+	"github.com/Ar5h71/r4-music-bot/musicmanager"
 )
 
 // function to play the queue
@@ -34,7 +35,7 @@ func (botInstance *BotInstance) playQueue(song *common.Song, playnow bool) {
 	} else {
 		botInstance.addSongBack(song)
 	}
-	if botInstance.Queue.nowPlaying != nil {
+	if botInstance.Queue.nowPlaying != nil && !botInstance.Queue.nowPlaying.finished {
 		log.Printf("[%s | %s]Bot is already playing",
 			botInstance.GuildId, botInstance.VoiceChannelId)
 		return
@@ -64,7 +65,7 @@ func (botInstance *BotInstance) playQueue(song *common.Song, playnow bool) {
 				// check if anything is playing
 				// if not start playing
 				// log.Printf("Inside goroutine")
-				if botInstance.Queue.nowPlaying != nil {
+				if botInstance.Queue.nowPlaying != nil && !botInstance.Queue.nowPlaying.finished {
 					continue
 				}
 
@@ -100,7 +101,7 @@ func (botInstance *BotInstance) skipSong() {
 		botInstance.GuildId, botInstance.VoiceChannelId)
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
-	if botInstance.Queue.nowPlaying == nil {
+	if botInstance.Queue.nowPlaying == nil || botInstance.Queue.nowPlaying.finished {
 		log.Printf("[%s | %s] Nothing is playing",
 			botInstance.GuildId, botInstance.TextChannelId)
 		sendMessageToChannel(botInstance, "No song is playing. Nothing to skip")
@@ -119,11 +120,11 @@ func (botInstance *BotInstance) stopQueue() {
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
 	nothingToStop := true
-	if botInstance.Queue.nowPlaying != nil {
+	if botInstance.Queue.nowPlaying != nil && !botInstance.Queue.nowPlaying.finished {
 		log.Printf("[%s | %s] Stopping current song",
 			botInstance.GuildId, botInstance.TextChannelId)
 		botInstance.Queue.nowPlaying.streamSession.stop <- nil
-		botInstance.Queue.nowPlaying = nil
+		botInstance.Queue.nowPlaying.finished = true
 		nothingToStop = false
 	}
 	if len(botInstance.Queue.songs) != 0 {
@@ -146,7 +147,7 @@ func (botInstance *BotInstance) pauseSong() {
 		botInstance.GuildId, botInstance.VoiceChannelId)
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
-	if botInstance.Queue.nowPlaying == nil {
+	if botInstance.Queue.nowPlaying == nil || botInstance.Queue.nowPlaying.finished {
 		log.Printf("[%s | %s] Nothing to pause",
 			botInstance.GuildId, botInstance.VoiceChannelId)
 		sendMessageToChannel(botInstance, "No song is playing. Nothing to pause")
@@ -175,7 +176,7 @@ func (botInstance *BotInstance) resumeSong() {
 		sendMessageToChannel(botInstance, "Queue is already playing")
 		return
 	}
-	if botInstance.Queue.nowPlaying == nil {
+	if botInstance.Queue.nowPlaying == nil || botInstance.Queue.nowPlaying.finished {
 		log.Printf("[%s | %s] Nothing to resume",
 			botInstance.GuildId, botInstance.VoiceChannelId)
 		sendMessageToChannel(botInstance, "Queue is already playing. Nothing to resume")
@@ -195,22 +196,41 @@ func (botInstance *BotInstance) playNext() {
 	}()
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
-	if len(botInstance.Queue.songs) == 0 && botInstance.Queue.nowPlaying == nil {
+	if len(botInstance.Queue.songs) == 0 && (botInstance.Queue.nowPlaying == nil || botInstance.Queue.nowPlaying.finished) && !botInstance.Queue.autoplay {
 		botInstance.Queue.done <- nil
 		return
 	}
-	song := botInstance.Queue.songs[0]
-	log.Printf("[%s | %s] Playing song %s",
-		botInstance.GuildId, botInstance.VoiceChannelId, song.SongTitle)
-	if len(botInstance.Queue.songs) == 1 {
-		botInstance.Queue.songs = make([]*common.Song, 0)
-	} else {
-		botInstance.Queue.songs = botInstance.Queue.songs[1:]
+
+	// check if autoplay
+	var song *common.Song
+	var err error
+	if botInstance.Queue.autoplay {
+		song, err = musicmanager.YtServiceClient.GetNextSongForAutoplay(botInstance.Queue.nowPlaying.song)
+		if err != nil {
+			// if trouble finding song, then go with queue
+			botInstance.Queue.autoplay = false
+			msg := "Failed to find next song for autoplay. Switching off autoplay"
+			log.Printf("[%s | %s] %s. Got error [%s]",
+				botInstance.GuildId, botInstance.VoiceChannelId, msg, err.Error())
+			sendMessageToChannel(botInstance, msg)
+		}
+	}
+
+	if !botInstance.Queue.autoplay {
+		song = botInstance.Queue.songs[0]
+		log.Printf("[%s | %s] Playing song %s",
+			botInstance.GuildId, botInstance.VoiceChannelId, song.SongTitle)
+		if len(botInstance.Queue.songs) == 1 {
+			botInstance.Queue.songs = make([]*common.Song, 0)
+		} else {
+			botInstance.Queue.songs = botInstance.Queue.songs[1:]
+		}
 	}
 	done := make(chan error)
 	botInstance.Queue.nowPlaying = &NowPlaying{
 		song:          song,
 		streamSession: NewAudioStream(song, botInstance.BotVoiceConnection, done),
+		finished:      false,
 	}
 	sendCurrentPlayingSongMessage(botInstance, song)
 
@@ -226,6 +246,6 @@ func (botInstance *BotInstance) playNext() {
 		}
 		botInstance.Queue.mtx.Lock()
 		defer botInstance.Queue.mtx.Unlock()
-		botInstance.Queue.nowPlaying = nil
+		botInstance.Queue.nowPlaying.finished = false
 	}()
 }
