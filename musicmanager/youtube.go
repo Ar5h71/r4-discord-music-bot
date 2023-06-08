@@ -70,24 +70,6 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 	return songs, nil
 }
 
-// Get recommendations for autoplay
-func (ytservice *YTService) GetNextSongForAutoplay(curSong *common.Song) (*common.Song, error) {
-	ytServiceRelatedListCall := ytservice.ytService.Search.List([]string{"id"})
-	ytServiceRelatedListCall.RelatedToVideoId(curSong.SongId).Type("video").VideoCategoryId("10").MaxResults(1)
-	ytRelatedSongResponse, err := ytServiceRelatedListCall.Do()
-	if err != nil {
-		log.Printf("Failed to get related song for song with id [%s]. Got error [%s]", curSong.SongId, err.Error())
-		return nil, err
-	}
-	if len(ytRelatedSongResponse.Items) == 0 {
-		log.Printf("No related songs found for [%s | %s]", curSong.SongId, curSong.SongTitle)
-		return nil, fmt.Errorf("No related songs found")
-	}
-
-	item := ytRelatedSongResponse.Items[0]
-	return GetSongWithStreamUrl(common.YoutubeVideoURLPrefix+item.Id.VideoId, "autoplay")
-}
-
 func GetSongWithStreamUrl(url, userName string) (*common.Song, error) {
 	// get video info from url
 	videoInfo, err := downloadClient.GetVideo(url)

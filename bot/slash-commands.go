@@ -26,7 +26,6 @@ const (
 	StopQueueCommand  = "stop-queue"
 	ResumeCommand     = "resume"
 	SearchCommand     = "search"
-	AutoplayCommand   = "autoplay"
 )
 
 // option name constants
@@ -134,10 +133,6 @@ var (
 					Required:    true,
 				},
 			},
-		},
-		{
-			Name:        AutoplayCommand,
-			Description: "Switch on/off autoplay. Autoplay will start for current playing song.",
 		},
 	}
 
@@ -319,22 +314,6 @@ var (
 
 			// send interaction response for search results
 			sendSearchResultsContentAndSelect(session, interaction, songs)
-		},
-		AutoplayCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-			})
-			autoplay, err := AutoplayCommandHandler(session, interaction)
-			if err != nil {
-				msg := err.Error()
-				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-					Content: &msg,
-				})
-				return
-			}
-
-			// send interaction response for autoplay
-			sendAutoplayResponse(session, interaction, autoplay)
 		},
 	}
 	componentHandlers = map[string]func(session *discordgo.Session, interaction *discordgo.InteractionCreate){
