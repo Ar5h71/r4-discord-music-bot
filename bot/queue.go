@@ -103,7 +103,7 @@ func (botInstance *BotInstance) skipSong() {
 	if botInstance.Queue.nowPlaying == nil {
 		log.Printf("[%s | %s] Nothing is playing",
 			botInstance.GuildId, botInstance.TextChannelId)
-		sendMessageToChannel(botInstance, "No song is playing. Nothing to skip")
+		sendMessageToChannel(botInstance, common.Boldify("No song is playing. Nothing to skip"))
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.stop <- nil
@@ -135,7 +135,7 @@ func (botInstance *BotInstance) stopQueue() {
 	if nothingToStop {
 		log.Printf("[%s | %s] Nothing to stop",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		sendMessageToChannel(botInstance, "No songs in queue. Nothing to stop")
+		sendMessageToChannel(botInstance, common.Boldify("No songs in queue. Nothing to stop"))
 		return
 	}
 }
@@ -149,13 +149,13 @@ func (botInstance *BotInstance) pauseSong() {
 	if botInstance.Queue.nowPlaying == nil {
 		log.Printf("[%s | %s] Nothing to pause",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		sendMessageToChannel(botInstance, "No song is playing. Nothing to pause")
+		sendMessageToChannel(botInstance, common.Boldify("No song is playing. Nothing to pause"))
 		return
 	}
 	if botInstance.Queue.paused {
 		log.Printf("[%s | %s] Already paused",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		sendMessageToChannel(botInstance, "Queue is already paused")
+		sendMessageToChannel(botInstance, common.Boldify("Queue is already paused"))
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.pauseStream()
@@ -172,13 +172,13 @@ func (botInstance *BotInstance) resumeSong() {
 	if !botInstance.Queue.paused {
 		log.Printf("[%s | %s] Already playing",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		sendMessageToChannel(botInstance, "Queue is already playing")
+		sendMessageToChannel(botInstance, common.Boldify("Queue is already playing"))
 		return
 	}
 	if botInstance.Queue.nowPlaying == nil {
 		log.Printf("[%s | %s] Nothing to resume",
 			botInstance.GuildId, botInstance.VoiceChannelId)
-		sendMessageToChannel(botInstance, "Queue is already playing. Nothing to resume")
+		sendMessageToChannel(botInstance, common.Boldify("Queue is already playing. Nothing to resume"))
 		return
 	}
 	botInstance.Queue.nowPlaying.streamSession.resumeStream()

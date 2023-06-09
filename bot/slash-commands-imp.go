@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 
 	"github.com/Ar5h71/r4-music-bot/common"
@@ -92,66 +93,31 @@ func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 
 	log.Printf("%s Got option: [%s]", logCtx, option.StringValue())
 
-	// search youtube for song
-	songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
+	var song *common.Song
 
-	if err != nil {
-		errMsg := fmt.Sprintf("Couldn't find the song for query '%s'", option.StringValue())
-		log.Printf("%s, error: [%s]", errMsg, err.Error())
-		return nil, fmt.Errorf(errMsg)
-	}
-	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning
-	// send signal to songsig channel
-	songSig <- &SongSignal{
-		song:        songs[0],
-		botInstance: botInstance,
-		playNow:     playNow,
-	}
-	// send skip signal if playNow is true
-	if playNow && botInstance.Queue.nowPlaying != nil {
-		botInstance.Queue.skip <- nil
-	}
-	return songs[0], nil
-}
+	// check if option received is url
+	_, err = url.ParseRequestURI(option.StringValue())
+	if err == nil {
+		log.Printf("%s Received option is a URL: [%s]", logCtx, option.StringValue())
+		song, err = musicmanager.GetSongWithStreamUrl(option.StringValue(), interaction.Member.User.Username)
+		if err != nil {
+			errMsg := fmt.Sprintf("Couldn't find song for the requested URL '%s'", option.StringValue())
+			log.Printf("%s error [%s]", logCtx, err.Error())
+			return nil, fmt.Errorf(errMsg)
+		}
+	} else {
 
-func PlayUrlCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate, playNow bool) (*common.Song, error) {
-	options := interaction.ApplicationCommandData().Options
-	guildId := interaction.GuildID
-	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
-	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
-	log.Printf("%s 'Play-url' command received", logCtx)
+		// search youtube for song
+		songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
+		song = songs[0]
 
-	// create bot instance and connect to voice channel if not there
-	botInstance, err := createAndGetBotInstance(session, interaction, true)
-	if err != nil {
-		return nil, err
+		if err != nil {
+			errMsg := fmt.Sprintf("Couldn't find the song for query '%s'", option.StringValue())
+			log.Printf("%s, error: [%s]", errMsg, err.Error())
+			return nil, fmt.Errorf(errMsg)
+		}
 	}
 
-	// extract option values
-	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
-	for _, option := range options {
-		optionMap[option.Name] = option
-	}
-
-	if _, ok := optionMap[SongUrlOption]; !ok {
-		return nil, errors.New("You need to specify a URL to play a song")
-	}
-	option := optionMap[SongUrlOption]
-
-	log.Printf("%s Got option: [%s]", logCtx, option.StringValue())
-
-	// search youtube for song
-	song, err := musicmanager.GetSongWithStreamUrl(option.StringValue(), interaction.Member.User.Username)
-	if err != nil {
-		log.Printf("%s Failed to get song stream url for youtube url '%s'. Got error: %s", logCtx, option.StringValue(), err.Error())
-		return nil, fmt.Errorf("Couldn't find song for url '%s'", option.StringValue())
-	}
-
-	if err != nil {
-		errMsg := "Couldn't find the requested song"
-		log.Printf("%s, error: [%s]", errMsg, err.Error())
-		return nil, fmt.Errorf(errMsg)
-	}
 	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning
 	// send signal to songsig channel
 	songSig <- &SongSignal{
@@ -280,7 +246,7 @@ func SearchComponentHandler(session *discordgo.Session, interaction *discordgo.I
 func EmptyQueueHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) error {
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
-	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
+	log.Printf("[%s | %s]. 'empty-queue' command received", guildId, vChannelId)
 
 	botInstance, err := createAndGetBotInstance(session, interaction, false)
 	if err != nil {
@@ -292,18 +258,111 @@ func EmptyQueueHandler(session *discordgo.Session, interaction *discordgo.Intera
 	return nil
 }
 
-func ShowQueueHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) ([]*common.Song, error) {
+func ShowQueueHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*BotInstance, []*common.Song, error) {
 	guildId := interaction.GuildID
 	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
-	log.Printf("[%s | %s]. 'skip' command received", guildId, vChannelId)
+	log.Printf("[%s | %s]. 'show-queue' command received", guildId, vChannelId)
 
 	botInstance, err := createAndGetBotInstance(session, interaction, false)
 	if err != nil {
-		return nil, err
+		return botInstance, nil, err
 	}
 
 	songs := make([]*common.Song, 0)
 	songs = append(songs, botInstance.Queue.nowPlaying.song)
 	songs = append(songs, botInstance.Queue.songs...)
-	return songs, nil
+	return botInstance, songs, nil
+}
+
+// if autoplay received, stop current song, search for relevant songs, add to
+// queue and start playing queried song
+func AutofillCommandHandler(session *discordgo.Session, interaction *discordgo.InteractionCreate) (*BotInstance, []*common.Song, error) {
+	options := interaction.ApplicationCommandData().Options
+	guildId := interaction.GuildID
+	vChannelId := SearchVoiceChannelId(interaction.Member.User.ID)
+	logCtx := fmt.Sprintf("[%s | %s]", guildId, vChannelId)
+	log.Printf("%s 'autofill' command received", logCtx)
+
+	// create bot instance and connect to voice channel if not there
+	botInstance, err := createAndGetBotInstance(session, interaction, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	var songQuery string
+	var songNum int
+	optionMap := make(map[string]string, 0)
+	for _, option := range options {
+		optionMap[option.Name] = option.StringValue()
+	}
+
+	if val, ok := optionMap[SongQueryOrUrlOptionName]; ok {
+		songQuery = val
+	}
+	if val, ok := optionMap[SongNumOption]; ok {
+		songNum, err = strconv.Atoi(val)
+		if err != nil {
+			log.Printf("[%s] Error when parsing songNum option. Error: %s", logCtx, err.Error())
+			return botInstance, nil, fmt.Errorf("Please specify number of songs correctly.")
+		}
+	} else {
+		songNum = DefaultSongsForAutofill
+	}
+
+	log.Printf("[%s] Got options for autoplay - %s: %s, %s: %d", logCtx, SongQueryOrUrlOptionName, songQuery, SongNumOption, songNum)
+
+	var song *common.Song
+
+	// check if option received is url
+	_, err = url.ParseRequestURI(songQuery)
+	if err == nil {
+		log.Printf("%s Received option is a URL: [%s]", logCtx, songQuery)
+		song, err = musicmanager.GetSongWithStreamUrl(songQuery, interaction.Member.User.Username)
+		if err != nil {
+			errMsg := fmt.Sprintf("Couldn't find song for the requested URL '%s'", songQuery)
+			log.Printf("%s error [%s]", logCtx, err.Error())
+			return botInstance, nil, fmt.Errorf(errMsg)
+		}
+	} else {
+
+		// search youtube for song
+		songs, err := musicmanager.YtServiceClient.Search(songQuery, interaction.Member.User.Username, 1)
+		song = songs[0]
+
+		if err != nil {
+			errMsg := fmt.Sprintf("Couldn't find the song for query '%s'", songQuery)
+			log.Printf("%s, error: [%s]", errMsg, err.Error())
+			return botInstance, nil, fmt.Errorf(errMsg)
+		}
+	}
+
+	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning
+
+	// search songs related to queried song
+	songs, err := musicmanager.YtServiceClient.SearchRelavantSongs(song.SongId, song.User, int64(songNum))
+	if err != nil {
+		log.Printf("[%s] Failed to get relevant songs for song [%s | %s]", logCtx, song.SongTitle, song.SongId)
+		return botInstance, nil, fmt.Errorf("Failed to generate queue")
+	}
+
+	// send signal to songsig channel to play queried song first
+	songSig <- &SongSignal{
+		song:        song,
+		botInstance: botInstance,
+		playNow:     true,
+	}
+
+	// change queue with searched songs
+	botInstance.Queue.mtx.Lock()
+	botInstance.Queue.songs = songs
+	botInstance.Queue.mtx.Unlock()
+	// send skip signal to stop current playing song
+	if botInstance.Queue.nowPlaying != nil {
+		botInstance.Queue.skip <- nil
+	}
+
+	songsInQueue := make([]*common.Song, 0)
+	songsInQueue = append(songsInQueue, song)
+	songsInQueue = append(songsInQueue, botInstance.Queue.songs...)
+
+	return botInstance, songsInQueue, nil
 }

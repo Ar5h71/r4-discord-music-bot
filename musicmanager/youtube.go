@@ -7,9 +7,12 @@ package musicmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/Ar5h71/r4-music-bot/common"
@@ -55,17 +58,28 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 		return nil, fmt.Errorf("No songs found for this query")
 	}
 	var songs []*common.Song
+	var errMsgs []string
+	wg := new(sync.WaitGroup)
+	wg.Add(len(ytSearchResponse.Items))
 	for _, item := range ytSearchResponse.Items {
-		videoId := item.Id.VideoId
+		go func(vidId string) {
+			defer wg.Done()
 
-		ytUrl := common.YoutubeVideoURLPrefix + videoId
+			ytUrl := common.YoutubeVideoURLPrefix + vidId
 
-		song, err := GetSongWithStreamUrl(ytUrl, userName)
-		if err != nil {
-			log.Printf("Failed to get song stream URL. Got error: %s", err.Error())
-			return nil, err
-		}
-		songs = append(songs, song)
+			song, err := GetSongWithStreamUrl(ytUrl, userName)
+			if err != nil {
+				log.Printf("Failed to get song stream URL. Got error: %s", err.Error())
+				errMsg := fmt.Sprintf("Failed to get song stream URL for song with id '%s'. Error [%s]", vidId, err.Error())
+				errMsgs = append(errMsgs, errMsg)
+				return
+			}
+			songs = append(songs, song)
+		}(item.Id.VideoId)
+	}
+	wg.Wait()
+	if len(errMsgs) > 0 {
+		return nil, errors.New(strings.Join(errMsgs, ";"))
 	}
 	return songs, nil
 }
@@ -101,4 +115,45 @@ func GetSongWithStreamUrl(url, userName string) (*common.Song, error) {
 		ChannelName:   channelName,
 		YoutubeSource: true,
 	}, nil
+}
+
+// Search single or multiple results
+func (ytservice *YTService) SearchRelavantSongs(videoId, userName string, resultNum int64) ([]*common.Song, error) {
+	// search for the query
+	ytServiceSearchListCall := ytservice.ytService.Search.List([]string{"id"})
+	ytServiceSearchListCall.Type("video").VideoCategoryId("10").MaxResults(resultNum).RelatedToVideoId(videoId)
+	ytSearchResponse, err := ytServiceSearchListCall.Do()
+	if err != nil {
+		log.Printf("Failed to search relevant songs for id [%s]. Got error [%s]", videoId, err.Error())
+		return nil, err
+	}
+	if len(ytSearchResponse.Items) == 0 {
+		log.Printf("No results found related to video id: %s", videoId)
+		return nil, fmt.Errorf("No songs found for this query")
+	}
+	var songs []*common.Song
+	var errMsgs []string
+	wg := new(sync.WaitGroup)
+	wg.Add(len(ytSearchResponse.Items))
+	for _, item := range ytSearchResponse.Items {
+		go func(vidId string) {
+			defer wg.Done()
+
+			ytUrl := common.YoutubeVideoURLPrefix + vidId
+
+			song, err := GetSongWithStreamUrl(ytUrl, userName)
+			if err != nil {
+				log.Printf("Failed to get song stream URL. Got error: %s", err.Error())
+				errMsg := fmt.Sprintf("Failed to get song stream URL for song with id '%s'. Error [%s]", vidId, err.Error())
+				errMsgs = append(errMsgs, errMsg)
+				return
+			}
+			songs = append(songs, song)
+		}(item.Id.VideoId)
+	}
+	wg.Wait()
+	if len(errMsgs) > 0 {
+		return nil, errors.New(strings.Join(errMsgs, ";"))
+	}
+	return songs, nil
 }

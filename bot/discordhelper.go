@@ -56,33 +56,11 @@ func sendCurrentPlayingSongMessage(botInstance *BotInstance, song *common.Song) 
 
 // send any message to discord channel
 func sendMessageToChannel(botInstance *BotInstance, msg string) {
-	_, err := botInstance.BotSession.ChannelMessageSend(botInstance.TextChannelId, common.Boldify(msg))
+	_, err := botInstance.BotSession.ChannelMessageSend(botInstance.TextChannelId, msg)
 	if err != nil {
 		log.Printf("[%s | %s] Failed to send message '%s'. Got error: %s",
 			botInstance.GuildId, botInstance.VoiceChannelId, msg, err.Error())
 	}
-}
-
-// send message for current songs in queue
-func sendCurrentQueueInteractionResponse(session *discordgo.Session, interaction *discordgo.InteractionCreate, songs []*common.Song) error {
-	videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, songs[0].SongId)
-	channelUrl := fmt.Sprintf("%s%s", common.YoutubeChannelURLPrefix, songs[0].ChannelId)
-	msg := fmt.Sprintf(">>> **Current Tracks in Queue**\n\n**Now Playing**\n%s -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`\n\n",
-		songs[0].SongDuration.String(), songs[0].SongTitle, videoUrl, songs[0].ChannelName, channelUrl, songs[0].User)
-
-	if len(songs) > 1 {
-
-		for idx, song := range songs[1:] {
-			videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, song.SongId)
-			channelUrl := fmt.Sprintf("%s%s", common.YoutubeChannelURLPrefix, song.ChannelId)
-			msg += fmt.Sprintf("%d. `%s` -- [%s](<%s>) | [%s](<%s>) | Requested by -- `%s`)\n",
-				idx+1, song.SongDuration.String(), song.SongTitle, videoUrl, song.ChannelName, channelUrl, song.User)
-		}
-	}
-	_, err := session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-		Content: &msg,
-	})
-	return err
 }
 
 // send response for search results and song select
@@ -123,4 +101,29 @@ func sendSearchResultsContentAndSelect(session *discordgo.Session, interaction *
 		Content:    &msg,
 	})
 	return err
+}
+
+func generateCurrentQueueMessagePaginated(songs []*common.Song) []string {
+	var msgsPaginated []string
+	var msg string
+	msg = fmt.Sprintf("**Current Tracks in Queue**\n\n**Now Playing**\n%s -- `%s` | `%s` | Requested by -- `%s`\n\n",
+		songs[0].SongDuration.String(), songs[0].SongTitle, songs[0].ChannelName, songs[0].User)
+
+	if len(songs) > 1 {
+
+		for idx, song := range songs[1:] {
+			curSongMsg := fmt.Sprintf("%d. `%s` -- `%s` | `%s` | Requested by -- `%s`\n",
+				idx+1, song.SongDuration.String(), song.SongTitle, song.ChannelName, song.User)
+			if len(msg)+len(curSongMsg) > 2000 {
+				msgsPaginated = append(msgsPaginated, msg)
+				msg = ""
+			}
+			msg += curSongMsg
+		}
+	}
+	if len(msg) > 0 {
+		msgsPaginated = append(msgsPaginated, msg)
+	}
+
+	return msgsPaginated
 }

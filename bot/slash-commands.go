@@ -9,6 +9,7 @@ package bot
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Ar5h71/r4-music-bot/common"
 	"github.com/bwmarrin/discordgo"
@@ -16,23 +17,23 @@ import (
 
 // command name constants
 const (
-	PlayCommand       = "play"
-	PlayNowCommand    = "play-now"
-	PlayUrlCommand    = "play-url"
-	PlayNowUrlCommand = "play-now-url"
-	PauseCommand      = "pause"
-	SkipCommand       = "skip"
-	ShowQueueCommand  = "show-queue"
-	StopQueueCommand  = "stop-queue"
-	ResumeCommand     = "resume"
-	SearchCommand     = "search"
+	PlayCommand      = "play"
+	PlayNowCommand   = "play-now"
+	PauseCommand     = "pause"
+	SkipCommand      = "skip"
+	ShowQueueCommand = "show-queue"
+	StopQueueCommand = "stop-queue"
+	ResumeCommand    = "resume"
+	SearchCommand    = "search"
+	AutofillCommand  = "autofill"
 )
 
 // option name constants
 const (
-	SongQueryOptionName = "song-query"
-	TimestampOptionName = "timestamp"
-	SongUrlOption       = "song-url"
+	SongQueryOrUrlOptionName = "song-query-or-url"
+	SongQueryOptionName      = "song-query"
+	TimestampOptionName      = "timestamp"
+	SongNumOption            = "song-num"
 )
 
 // constants for responses
@@ -42,12 +43,19 @@ const (
 	PauseTrack          = "Pausing current playing track"
 	ResumeTrack         = "Resuming current paused track"
 	StopQueue           = "Stopping queue. Removing all tracks"
+	ShowQueue           = "Checking all songs in queue"
+	Autofill            = "Successfully generated playlist"
 )
 
 // constants for search command
 const (
 	SearchComponent    = "search_component"
 	searchSelectHeader = "Please select a track to be added to queue"
+)
+
+// general constants
+const (
+	DefaultSongsForAutofill = 20
 )
 
 var (
@@ -60,20 +68,8 @@ var (
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        SongQueryOptionName,
-					Description: "Query for song to be played.",
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        PlayUrlCommand,
-			Description: "Play a song from youtube url. Add it to queue if song is playing.",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        SongUrlOption,
-					Description: "Youtube url for song to be played.",
+					Name:        SongQueryOrUrlOptionName,
+					Description: "Query or URL for song to be played.",
 					Required:    true,
 				},
 			},
@@ -84,20 +80,8 @@ var (
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        SongQueryOptionName,
-					Description: "Query for song to be played.",
-					Required:    true,
-				},
-			},
-		},
-		{
-			Name:        PlayNowUrlCommand,
-			Description: "Skip the current song and play the queried url instead.",
-			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        SongUrlOption,
-					Description: "Youtube url for song to be played.",
+					Name:        SongQueryOrUrlOptionName,
+					Description: "Query or URL for song to be played.",
 					Required:    true,
 				},
 			},
@@ -134,6 +118,24 @@ var (
 				},
 			},
 		},
+		{
+			Name:        AutofillCommand,
+			Description: "Add relevant songs to queue. Songs searched based on current playing song. Current queue is ended",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        SongQueryOrUrlOptionName,
+					Description: "Query or URL for song to be played and queue generated",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        SongNumOption,
+					Description: "Number of songs to be added to queue",
+					Required:    false,
+				},
+			},
+		},
 	}
 
 	// command handlers for command definitions
@@ -154,21 +156,6 @@ var (
 
 			addToQueueInteractionResponse(session, interaction, song, false)
 		},
-		PlayUrlCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-			})
-			song, err := PlayUrlCommandHandler(session, interaction, false)
-
-			if err != nil {
-				msg := fmt.Sprintf("`%s`", err.Error())
-				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-					Content: &msg,
-				})
-				return
-			}
-			addToQueueInteractionResponse(session, interaction, song, false)
-		},
 		PlayNowCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
@@ -185,22 +172,6 @@ var (
 
 			addToQueueInteractionResponse(session, interaction, song, true)
 		},
-		PlayNowUrlCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
-			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
-			})
-			song, err := PlayUrlCommandHandler(session, interaction, true)
-
-			if err != nil {
-				msg := common.Boldify(err.Error())
-				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
-					Content: &msg,
-				})
-				return
-			}
-			addToQueueInteractionResponse(session, interaction, song, true)
-		},
-
 		PauseCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
@@ -243,7 +214,7 @@ var (
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
 			})
 
-			songs, err := ShowQueueHandler(session, interaction)
+			botInstance, songs, err := ShowQueueHandler(session, interaction)
 			if err != nil {
 				msg := common.Boldify(err.Error())
 				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
@@ -252,7 +223,16 @@ var (
 				return
 			}
 
-			sendCurrentQueueInteractionResponse(session, interaction, songs)
+			msg := ShowQueue
+
+			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+				Content: &msg,
+			})
+			currentQueueMsgPaginated := generateCurrentQueueMessagePaginated(songs)
+
+			for _, queueMsgPage := range currentQueueMsgPaginated {
+				sendMessageToChannel(botInstance, queueMsgPage)
+			}
 		},
 		StopQueueCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
 			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
@@ -314,6 +294,39 @@ var (
 
 			// send interaction response for search results
 			sendSearchResultsContentAndSelect(session, interaction, songs)
+		},
+		AutofillCommand: func(session *discordgo.Session, interaction *discordgo.InteractionCreate) {
+			session.InteractionRespond(interaction.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+			})
+			botInstance, songs, err := AutofillCommandHandler(session, interaction)
+
+			if err != nil {
+				msg := common.Boldify(err.Error())
+				session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+					Content: &msg,
+				})
+				return
+			}
+
+			msg := Autofill
+
+			session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
+				Content: &msg,
+			})
+			currentQueueMsgPaginated := generateCurrentQueueMessagePaginated(songs)
+
+			// wait for song to be played
+			for botInstance.Queue.nowPlaying == nil {
+				continue
+			}
+
+			time.Sleep(1 * time.Second)
+
+			for _, queueMsgPage := range currentQueueMsgPaginated {
+				sendMessageToChannel(botInstance, queueMsgPage)
+			}
+
 		},
 	}
 	componentHandlers = map[string]func(session *discordgo.Session, interaction *discordgo.InteractionCreate){
