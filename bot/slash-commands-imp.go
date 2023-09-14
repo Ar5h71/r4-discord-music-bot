@@ -109,13 +109,13 @@ func PlayCommandHandler(session *discordgo.Session, interaction *discordgo.Inter
 
 		// search youtube for song
 		songs, err := musicmanager.YtServiceClient.Search(option.StringValue(), interaction.Member.User.Username, 1)
-		song = songs[0]
 
 		if err != nil {
 			errMsg := fmt.Sprintf("Couldn't find the song for query '%s'", option.StringValue())
 			log.Printf("%s, error: [%s]", errMsg, err.Error())
 			return nil, fmt.Errorf(errMsg)
 		}
+		song = songs[0]
 	}
 
 	botInstance.BotVoiceConnection.LogLevel = discordgo.LogWarning

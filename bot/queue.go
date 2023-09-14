@@ -119,17 +119,17 @@ func (botInstance *BotInstance) stopQueue() {
 	botInstance.Queue.mtx.Lock()
 	defer botInstance.Queue.mtx.Unlock()
 	nothingToStop := true
+	if len(botInstance.Queue.songs) != 0 {
+		log.Printf("[%s | %s] Removing all songs",
+			botInstance.GuildId, botInstance.TextChannelId)
+		botInstance.Queue.songs = make([]*common.Song, 0)
+		nothingToStop = false
+	}
 	if botInstance.Queue.nowPlaying != nil {
 		log.Printf("[%s | %s] Stopping current song",
 			botInstance.GuildId, botInstance.TextChannelId)
 		botInstance.Queue.nowPlaying.streamSession.stop <- nil
 		botInstance.Queue.nowPlaying = nil
-		nothingToStop = false
-	}
-	if len(botInstance.Queue.songs) != 0 {
-		log.Printf("[%s | %s] Removing all songs",
-			botInstance.GuildId, botInstance.TextChannelId)
-		botInstance.Queue.songs = make([]*common.Song, 0)
 		nothingToStop = false
 	}
 	if nothingToStop {

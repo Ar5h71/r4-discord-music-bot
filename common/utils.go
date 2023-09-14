@@ -34,3 +34,11 @@ func PrettyPrint(iface interface{}) string {
 func Boldify(msg string) string {
 	return fmt.Sprintf("**%s**", msg)
 }
+
+// return only first 20 characters of a song title
+func ShortenSongTitle(songTitle string) string {
+	if len(songTitle) <= 20 {
+		return songTitle
+	}
+	return songTitle[:20] + "..."
+}

@@ -69,7 +69,6 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 
 			song, err := GetSongWithStreamUrl(ytUrl, userName)
 			if err != nil {
-				log.Printf("Failed to get song stream URL. Got error: %s", err.Error())
 				errMsg := fmt.Sprintf("Failed to get song stream URL for song with id '%s'. Error [%s]", vidId, err.Error())
 				errMsgs = append(errMsgs, errMsg)
 				return
@@ -77,7 +76,9 @@ func (ytservice *YTService) Search(query, userName string, resultNum int64) ([]*
 			songs = append(songs, song)
 		}(item.Id.VideoId)
 	}
+	log.Printf("Waiting for stream url for search results for query %s", query)
 	wg.Wait()
+	log.Printf("Fetched stream url for all search results for query %s", query)
 	if len(errMsgs) > 0 {
 		return nil, errors.New(strings.Join(errMsgs, ";"))
 	}
@@ -96,6 +97,11 @@ func GetSongWithStreamUrl(url, userName string) (*common.Song, error) {
 	channelName := videoInfo.Author
 	formats := videoInfo.Formats.WithAudioChannels().AudioChannels(2)
 	formats.Sort()
+	if len(formats) == 0 {
+		log.Printf("No formats for video with id '%s', title '%s'",
+			songId, songTitle)
+		return nil, fmt.Errorf("No valid formats found for the song")
+	}
 	// take the best format after sorting
 	songUrl, err := downloadClient.GetStreamURL(videoInfo, &formats[0])
 	if err != nil {
@@ -121,7 +127,7 @@ func GetSongWithStreamUrl(url, userName string) (*common.Song, error) {
 func (ytservice *YTService) SearchRelavantSongs(videoId, userName string, resultNum int64) ([]*common.Song, error) {
 	// search for the query
 	ytServiceSearchListCall := ytservice.ytService.Search.List([]string{"id"})
-	ytServiceSearchListCall.Type("video").VideoCategoryId("10").MaxResults(resultNum).RelatedToVideoId(videoId)
+	ytServiceSearchListCall.Type("video").VideoCategoryId("10").MaxResults(resultNum).RelatedToVideoId(videoId).VideoDuration("short").VideoSyndicated("any")
 	ytSearchResponse, err := ytServiceSearchListCall.Do()
 	if err != nil {
 		log.Printf("Failed to search relevant songs for id [%s]. Got error [%s]", videoId, err.Error())

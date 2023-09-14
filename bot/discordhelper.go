@@ -39,6 +39,9 @@ func addToQueueInteractionResponse(session *discordgo.Session, interaction *disc
 	_, err := session.InteractionResponseEdit(interaction.Interaction, &discordgo.WebhookEdit{
 		Content: &msg,
 	})
+	if err != nil {
+		log.Printf("Failed to send interaction response for add to queue. Got error: %s", err.Error())
+	}
 	return err
 }
 
@@ -90,9 +93,8 @@ func sendSearchResultsContentAndSelect(session *discordgo.Session, interaction *
 	if len(songs) > 1 {
 		for idx, song := range songs {
 			videoUrl := fmt.Sprintf("%s%s", common.YoutubeVideoURLPrefix, song.SongId)
-			channelUrl := fmt.Sprintf("%s%s", common.YoutubeChannelURLPrefix, song.ChannelId)
-			msg += fmt.Sprintf("%d. `%s` -- [%s](<%s>) | [%s](<%s>)\n",
-				idx+1, song.SongDuration.String(), song.SongTitle, videoUrl, song.ChannelName, channelUrl)
+			msg += fmt.Sprintf("%d. `%s` -- [%s](<%s>) \n",
+				idx+1, song.SongDuration.String(), common.ShortenSongTitle(song.SongTitle), videoUrl)
 		}
 	}
 
@@ -100,6 +102,9 @@ func sendSearchResultsContentAndSelect(session *discordgo.Session, interaction *
 		Components: &searchSelectMenuComponent,
 		Content:    &msg,
 	})
+	if err != nil {
+		log.Printf("Failed to send interaction response for search. Got error %s", err.Error())
+	}
 	return err
 }
 
